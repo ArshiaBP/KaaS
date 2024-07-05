@@ -180,7 +180,7 @@ func CreateCronJob(appName, imageAddress, imageTag string, servicePort int32) *c
 								{
 									Name:    appName,
 									Image:   fmt.Sprintf("%s:%s", imageAddress, imageTag),
-									Command: []string{"sh", "-c", fmt.Sprintf(`while true; do curl -i http://%s:%s/healthz; sleep 5; done`, serviceName, servicePortStr)},
+									Command: []string{"sh", "-c", fmt.Sprintf(`curl -i http://%s:%s/healthz`, serviceName, servicePortStr)},
 								},
 							},
 							RestartPolicy: corev1.RestartPolicyOnFailure,
@@ -252,47 +252,6 @@ func CreateStatefulSet(name, imageAddress, imageTag string, replicas, servicePor
 	}
 	return statefulSet
 }
-
-//func CreatePVC(name string) *corev1.PersistentVolumeClaim {
-//	pvc := &corev1.PersistentVolumeClaim{
-//		ObjectMeta: metav1.ObjectMeta{
-//			Name:      fmt.Sprintf("postgres-%s-pvc", name),
-//			Namespace: "default",
-//		},
-//		Spec: corev1.PersistentVolumeClaimSpec{
-//			AccessModes: []corev1.PersistentVolumeAccessMode{
-//				corev1.ReadWriteOnce,
-//			},
-//			Resources: corev1.VolumeResourceRequirements{
-//				Requests: corev1.ResourceList{
-//					corev1.ResourceStorage: resource.MustParse("10Gi"),
-//				},
-//			},
-//		},
-//	}
-//	return pvc
-//}
-//
-//func CreatePV(name string) *corev1.PersistentVolume {
-//	pv := &corev1.PersistentVolume{
-//		ObjectMeta: metav1.ObjectMeta{
-//			Name:      fmt.Sprintf("postgres-%s-pv", name),
-//			Namespace: "default",
-//		},
-//		Spec: corev1.PersistentVolumeSpec{
-//			AccessModes:                   []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-//			PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimRetain,
-//			Capacity:                      corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("2Gi")},
-//			ClaimRef: &corev1.ObjectReference{
-//				APIVersion: "v1",
-//				Kind:       "PersistentVolumeClaim",
-//				Name:       fmt.Sprintf("postgres-%s-pvc", name),
-//				Namespace:  "default",
-//			},
-//		},
-//	}
-//	return pv
-//}
 
 func CreateIngress(name string, servicePort int32, managed bool) *networkingv1.Ingress {
 	host := ""
@@ -381,7 +340,19 @@ func GeneratePassword(length int, useLetters bool, useSpecial bool, useNum bool)
 	return string(b)
 }
 
-func GetJobsLogs(appName string) {
+func GetJobsLogs(appName, method, endpoint string) {
+	record := models.HealthCheck{
+		AppName:      appName,
+		FailureCount: 0,
+		SuccessCount: 0,
+		LastFailure:  time.Time{},
+		LastSuccess:  time.Time{},
+	}
+	if err := configs.DB.Create(&record).Error; err != nil {
+		log.Printf("failed to create a record for app %s in health_check table", appName)
+		go GetJobsLogs(appName, method, endpoint)
+		return
+	}
 	for {
 		jobs, jobErr := configs.Client.BatchV1().Jobs("default").List(context.Background(), metav1.ListOptions{})
 		if jobErr != nil {
@@ -424,9 +395,41 @@ func GetJobsLogs(appName string) {
 				}
 				fmt.Println(statusCode)
 				if statusCode == 200 {
-
+					var record models.HealthCheck
+					result := configs.DB.Table("health_check").Where("app_name = ?", appName).Find(&record)
+					if result.Error != nil {
+						FailedDBRequests.WithLabelValues(method, endpoint).Inc()
+						FailedRequests.WithLabelValues(method, endpoint).Inc()
+						log.Println("failed to retrieve data from health_check table")
+						continue
+					}
+					record.SuccessCount++
+					record.LastSuccess = time.Now()
+					result = configs.DB.Save(&record)
+					if result.Error != nil {
+						FailedDBRequests.WithLabelValues(method, endpoint).Inc()
+						FailedRequests.WithLabelValues(method, endpoint).Inc()
+						log.Println("failed to update health_check table")
+						continue
+					}
 				} else {
-
+					var record models.HealthCheck
+					result := configs.DB.Table("health_check").Where("app_name = ?", appName).Find(&record)
+					if result.Error != nil {
+						FailedDBRequests.WithLabelValues(method, endpoint).Inc()
+						FailedRequests.WithLabelValues(method, endpoint).Inc()
+						log.Println("failed to retrieve data from health_check table")
+						continue
+					}
+					record.FailureCount++
+					record.LastFailure = time.Now()
+					result = configs.DB.Save(&record)
+					if result.Error != nil {
+						FailedDBRequests.WithLabelValues(method, endpoint).Inc()
+						FailedRequests.WithLabelValues(method, endpoint).Inc()
+						log.Println("failed to update health_check table")
+						continue
+					}
 				}
 			}
 			err := configs.Client.BatchV1().Jobs(job.Namespace).Delete(context.Background(), job.Name, metav1.DeleteOptions{
@@ -437,6 +440,6 @@ func GetJobsLogs(appName string) {
 				log.Printf("failed to delete job %s: %v", job.Name, podErr)
 			}
 		}
-		time.Sleep(time.Second * 5)
+		time.Sleep(time.Minute)
 	}
 }

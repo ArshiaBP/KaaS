@@ -1,5 +1,10 @@
 package models
 
+import (
+	"gorm.io/gorm"
+	"time"
+)
+
 type Environment struct {
 	Key      string `json:"Key"`
 	Value    string `json:"Value"`
@@ -22,4 +27,13 @@ type PodStatus struct {
 	HostID    string `json:"HostID"`
 	PodIP     string `json:"PodIP"`
 	StartTime string `json:"StartTime"`
+}
+
+type HealthCheck struct {
+	gorm.Model
+	AppName      string
+	FailureCount int
+	SuccessCount int
+	LastFailure  time.Time
+	LastSuccess  time.Time
 }
