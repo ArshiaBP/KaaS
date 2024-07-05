@@ -58,7 +58,7 @@ func Routes(server *echo.Echo) {
 	server.GET("/get-deployment/:app-name", GetDeployment)
 	server.GET("/get-all-deployments", GetAllDeployments)
 	server.GET("/health/:app-name", HealthCheck)
-	if err := server.Start(fmt.Sprintf("localhost:%s", port)); err != nil {
+	if err := server.Start(fmt.Sprintf("0.0.0.0:%s", port)); err != nil {
 		log.Fatalf("Server failed to listen: %v", err)
 	}
 }
