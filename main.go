@@ -17,6 +17,7 @@ func init() {
 
 func main() {
 	configs.CreateClient()
+	configs.ConnectToDatabase()
 	server := echo.New()
 	api.Routes(server)
 }

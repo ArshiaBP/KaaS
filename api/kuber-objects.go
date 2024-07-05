@@ -364,7 +364,6 @@ func GetJobsLogs(appName, method, endpoint string) {
 				filteredJobs = append(filteredJobs, &job)
 			}
 		}
-		fmt.Println("length job", len(filteredJobs))
 		for _, job := range filteredJobs {
 			pods, podErr := configs.Client.CoreV1().Pods(job.Namespace).List(context.Background(), metav1.ListOptions{
 				LabelSelector: fmt.Sprintf("job-name=%s", job.Name),
@@ -372,7 +371,6 @@ func GetJobsLogs(appName, method, endpoint string) {
 			if podErr != nil {
 				log.Printf("failed to get pods for job %s: %v", job.Name, podErr)
 			}
-			fmt.Println("length pod", len(pods.Items))
 			for _, pod := range pods.Items {
 				stdout, logErr := configs.Client.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, &corev1.PodLogOptions{}).Stream(context.Background())
 				if logErr != nil {
@@ -393,7 +391,7 @@ func GetJobsLogs(appName, method, endpoint string) {
 						break
 					}
 				}
-				fmt.Println(statusCode)
+				log.Println(statusCode)
 				if statusCode == 200 {
 					var record models.HealthCheck
 					result := configs.DB.Table("health_check").Where("app_name = ?", appName).Find(&record)
