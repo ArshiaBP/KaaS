@@ -26,7 +26,7 @@ Go, [Echo](https://echo.labstack.com/) for the HTTP layer, [client-go](https://g
 | `GET` | `/health/:app-name` | Health-check history for an app (requires monitoring enabled) |
 | `GET` | `/metrics` | Prometheus metrics |
 
-## Running it
+## Running project
 
 KaaS runs inside the cluster (it uses in-cluster config to talk to the Kubernetes API), so it needs to be deployed, not run locally against a remote cluster.
 
